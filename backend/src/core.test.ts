@@ -1,0 +1,3 @@
+import { describe,it,expect } from 'vitest';
+import { cached, cacheKey, cacheStats } from './cache/cache.js';
+describe('cache',()=>{it('deduplica chamadas simultâneas e reaproveita valor',async()=>{const key=cacheKey('test','item',{id:1});let calls=0;const load=async()=>{calls++;return {value:7}};const [a,b]=await Promise.all([cached(key,30,load),cached(key,30,load)]);expect(a).toEqual(b);expect(calls).toBe(1);expect(await cached(key,30,load)).toEqual(a);expect(cacheStats.hits).toBeGreaterThan(0);});it('usa valor expirado quando loader falha',async()=>{const key=cacheKey('test','fallback',{id:2});await cached(key,1,async()=>42);await new Promise(r=>setTimeout(r,1050));expect(await cached(key,1,async()=>{throw new Error('offline')})).toBe(42);});});

@@ -1,0 +1,12 @@
+{
+  "name": "animeverse",
+  "private": true,
+  "workspaces": ["frontend", "backend"],
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c blue,magenta \"npm:dev -w backend\" \"npm:dev -w frontend\"",
+    "build": "npm run build -w backend && npm run build -w frontend",
+    "test": "npm run test -w backend",
+    "start": "npm run start -w backend"
+  },
+  "devDependencies": { "concurrently": "^9.1.2" }
+}
