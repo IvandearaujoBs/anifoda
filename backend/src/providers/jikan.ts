@@ -2,6 +2,7 @@ import { env } from '../config/env.js';
 let nextRequestAt = 0;
 let requestQueue: Promise<void> = Promise.resolve();
 export class JikanProvider {
+ readonly id = 'jikan';
  private async get<T>(path: string): Promise<T> {
   const scheduled = requestQueue.then(async () => { const wait = Math.max(0, nextRequestAt - Date.now()); if (wait) await new Promise(r => setTimeout(r, wait)); nextRequestAt = Date.now() + env.JIKAN_MIN_INTERVAL_MS; });
   requestQueue = scheduled.catch(() => {}); await scheduled;

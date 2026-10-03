@@ -1,6 +1,6 @@
 # AnimeVerse
 
-Catálogo responsivo de animes com metadados reais do [Jikan API](https://docs.api.jikan.moe/), baseado no MyAnimeList. O projeto separa front-end Vite/TypeScript e API Express/TypeScript.
+Catálogo responsivo de animes com metadados reais da [API Kitsu](https://kitsu.docs.apiary.io/), sem chave. Jikan permanece disponível como alternativa configurável. O projeto separa front-end Vite/TypeScript e API Express/TypeScript.
 
 ## Requisitos
 
@@ -34,10 +34,10 @@ O build do front-end fica em `frontend/dist`; o do backend em `backend/dist`. Si
 
 - Trilhos de animes populares e em exibição, com capas, ano e status retornados pela fonte.
 - Modal de catálogo com busca debounced, filtros por gênero, tipo e situação, paginação, estados de erro e vazio, Escape e clique fora.
-- Detalhes, sinopse, gêneros, classificação, estúdios e lista paginada de episódios, conforme disponíveis no Jikan.
+- Detalhes, sinopse, gêneros, classificação, estúdios e lista paginada de episódios, conforme disponíveis no provedor selecionado.
 - Perfil local anônimo enviado pela interface e endpoints de histórico/progresso persistidos em SQLite. Sem um player ativo, a interface só exibe um progresso se já tiver sido enviado ao endpoint; o perfil não sincroniza entre dispositivos.
 - Cache em memória com TTL, deduplicação de chamadas simultâneas, fallback para cópia expirada após falha do provedor e Redis opcional.
-- Reprodução por embed oficial do YouTube quando disponível, com Consumet como provedor configurado para resolver título, episódio e fonte de vídeo.
+- Reprodução por embed oficial do YouTube quando disponível; adaptador de reprodução configurável para HiAnime, Consumet ou nenhum provedor.
 
 ## API interna
 
@@ -46,7 +46,7 @@ Todos os endpoints usam JSON. Respostas de catálogo colocam os dados em `data` 
 | Método e caminho | Uso |
 | --- | --- |
 | `GET /api/health` | Estado da API |
-| `GET /api/providers` | Estado e configuração do Consumet |
+| `GET /api/providers` | Estado dos provedores de reprodução e prontidão do adaptador HiAnime |
 | `GET /api/animes/popular?page=1` | Títulos populares |
 | `GET /api/animes/season?page=1` | Títulos da temporada atual |
 | `GET /api/animes/search?q=...&page=1&genre=&type=&status=` | Busca e filtros |
@@ -55,20 +55,22 @@ Todos os endpoints usam JSON. Respostas de catálogo colocam os dados em `data` 
 | `GET /api/animes/:id/seasons` | Informa que a fonte não fornece temporadas confiáveis |
 | `GET /api/animes/:id/episodes?page=1` | Episódios publicados pela fonte |
 | `GET /api/animes/:id/episodes/:episodeId` | Metadados de episódio |
-| `GET /api/animes/:id/episodes/:episodeId/source` | Resolve primeiro um embed oficial e depois consulta Consumet |
+| `GET /api/animes/:id/episodes/:episodeId/source` | Resolve primeiro um embed oficial e depois consulta o provedor de reprodução selecionado |
 | `GET /api/history` | Histórico do perfil enviado no cabeçalho `x-profile-id` |
 | `POST /api/history/progress` | Grava progresso validado |
 | `GET /api/cache/stats` | Contadores do cache; em produção requer `x-cache-admin` igual a `CACHE_ADMIN_KEY` |
 
 ## Configuração
 
-Veja `.env.example` para porta, origem do front-end, banco SQLite, URL Redis, endereços do Jikan e Consumet, provedor de anime Consumet, timeouts, TTLs e rate limit. O banco é criado automaticamente no caminho `DATABASE_PATH` (por padrão `backend/data/anifoda.sqlite` quando iniciado na pasta do backend; usando os scripts da raiz, `./data/anifoda.sqlite`).
+Veja `.env.example` para porta, origem do front-end, banco SQLite, URL Redis, seleção do catálogo (`CATALOG_PROVIDER=kitsu` por padrão), seleção do provedor de reprodução (`PLAYBACK_PROVIDER=hianime` por padrão), URLs e timeouts. O banco é criado automaticamente no caminho `DATABASE_PATH` (por padrão `backend/data/anifoda.sqlite` quando iniciado na pasta do backend; usando os scripts da raiz, `./data/anifoda.sqlite`).
 
-Para trocar o provedor de catálogo, implemente os métodos equivalentes em `backend/src/providers/jikan.ts` e mantenha a API interna estável. Um provedor de vídeo futuro deve retornar apenas fontes autorizadas, validar protocolo e origem no backend e ser configurado separadamente dos metadados.
+O catálogo usa Kitsu por padrão; seu caminho da API é normalizado para `/api/edge` inclusive se `KITSU_BASE_URL` estiver configurado apenas como `https://kitsu.io`. Para voltar ao Jikan, ajuste `CATALOG_PROVIDER=jikan`. O catálogo permanece desacoplado do provedor de reprodução.
 
-### Consumet
+### Provedor de reprodução HiAnime
 
-O backend consulta a busca, os detalhes/episódios e as fontes de reprodução da instância Consumet configurada. Ao clicar em um episódio, o AnimeVerse procura o título no provedor configurado, exige correspondência de título, localiza o mesmo número de episódio e escolhe uma fonte HTTPS, priorizando MP4 e qualidade. O player suporta MP4 e HLS nativo do navegador; o suporte HLS varia entre navegadores. Configure `CONSUMET_ENABLED`, `CONSUMET_BASE_URL`, `CONSUMET_ANIME_PROVIDER` e `CONSUMET_TIMEOUT_MS` no `.env`. `GET /api/providers` informa a configuração; não faz uma chamada de saúde ao serviço externo. O adaptador fica desligado automaticamente em testes para não fazer requisições externas.
+O backend está preparado para selecionar o adaptador HiAnime, mas ainda não consulta uma rota de vídeo: a documentação do projeto consultado descreve catálogo, detalhes e episódios e não especifica um resolvedor de fonte. Assim, nenhum endpoint de reprodução foi presumido ou inventado. Configure `PLAYBACK_PROVIDER=hianime` e `HIANIME_API_BASE_URL` com a URL base da sua instância. Quando tiver a rota licenciada, conecte a chamada e valide a resposta em `backend/src/providers/hianime.ts`; a assinatura comum está em `backend/src/providers/playback.ts`. Até essa conexão ser implementada, a API informa que o adaptador está aguardando o resolvedor.
+
+Para continuar usando a integração Consumet existente, selecione `PLAYBACK_PROVIDER=consumet` e configure `CONSUMET_ENABLED=true`, `CONSUMET_BASE_URL`, `CONSUMET_ANIME_PROVIDER` e `CONSUMET_TIMEOUT_MS`. Para desativar provedores externos de reprodução, use `PLAYBACK_PROVIDER=none`. `GET /api/providers` mostra qual está selecionado e o status de configuração, sem expor a URL privada.
 
 ## Verificação
 

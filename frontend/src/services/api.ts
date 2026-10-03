@@ -1,7 +1,8 @@
 const base = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
 export interface Anime {
-  mal_id: number;
+  id?: number;
+  mal_id?: number | null;
   title: string;
   title_english?: string | null;
   title_japanese?: string | null;
@@ -12,7 +13,7 @@ export interface Anime {
   score?: number | null;
   rating?: string | null;
   images?: { jpg?: { large_image_url?: string; image_url?: string } };
-  genres?: Array<{ mal_id: number; name: string }>;
+  genres?: Array<{ mal_id: string | number; name: string }>;
   studios?: Array<{ name: string }>;
   type?: string | null;
 }
@@ -33,7 +34,7 @@ export const api = {
     if (genre) p.set('genre', genre); if (type) p.set('type', type); if (status) p.set('status', status);
     return read<Page<Anime>>(`/animes/search?${p}`);
   },
-  genres: () => read<{ data: Array<{ mal_id: number; name: string }> }>('/animes/genres'),
+  genres: () => read<{ data: Array<{ mal_id: string | number; name: string }> }>('/animes/genres'),
   details: (id: number) => read<{ data: Anime }>(`/animes/${id}`),
   episodes: (id: number, page = 1) => read<Page<Episode>>(`/animes/${id}/episodes?page=${page}`),
   source: (id: number, episode: number) => read<{ data: PlaybackSource | null; message?: string }>(`/animes/${id}/episodes/${episode}/source`),

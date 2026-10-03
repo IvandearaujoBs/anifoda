@@ -34,8 +34,20 @@ const request = async (path: string) => {
       headers: { accept: 'application/json' },
       signal: AbortSignal.timeout(env.CONSUMET_TIMEOUT_MS),
     });
-    if (!response.ok) throw Object.assign(new Error(`Consumet respondeu ${response.status}`), { status: 502 });
-    return await response.json() as unknown;
+    if (!response.ok) {
+      // Preserve the upstream status for diagnostics, but return a gateway error
+      // to callers because this application is acting as a proxy.
+      const detail = response.status === 451
+        ? `Consumet respondeu HTTP 451 em /${path.split('?')[0]}. A instância configurada recusou a solicitação; confira CONSUMET_BASE_URL e o acesso autorizado.`
+        : `Consumet respondeu HTTP ${response.status} em /${path.split('?')[0]}.`;
+      throw Object.assign(new Error(detail), { status: 502, upstreamStatus: response.status, provider: 'consumet' });
+    }
+    const body = await response.text();
+    try { return JSON.parse(body) as unknown; }
+    catch {
+      const html = /^\s*<!doctype html|^\s*<html/i.test(body);
+      throw Object.assign(new Error(html ? `Consumet retornou HTML em vez de JSON (HTTP ${response.status}).` : `Consumet retornou conteúdo inválido (HTTP ${response.status}).`), { status: 502, provider: 'consumet' });
+    }
   } catch (error) {
     if (Number((error as { status?: number })?.status)) throw error;
     const timeout = (error as { name?: string })?.name === 'TimeoutError';
@@ -67,7 +79,7 @@ const qualityRank = (quality?: string) => {
 
 const parseUpstream = <T>(schema: z.ZodType<T>, payload: unknown): T => {
   try { return schema.parse(payload); }
-  catch { throw Object.assign(new Error('Consumet retornou uma resposta em formato inesperado.'), { status: 502 }); }
+  catch { throw Object.assign(new Error('Consumet retornou uma resposta em formato inesperado.'), { status: 502, provider: 'consumet' }); }
 };
 
 export async function consumetSourceForEpisode(titles: string[], episodeNumber: number): Promise<PlaybackSource | undefined> {
@@ -109,7 +121,7 @@ export async function consumetSourceForEpisode(titles: string[], episodeNumber: 
 
 export const consumetProvider: PlaybackProvider = {
   id: 'consumet',
-  enabled: env.CONSUMET_ENABLED,
+  enabled: env.PLAYBACK_PROVIDER === 'consumet' && env.CONSUMET_ENABLED,
   sourceForEpisode: consumetSourceForEpisode,
 };
 
